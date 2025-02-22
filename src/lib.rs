@@ -4,8 +4,12 @@ use std::thread;
 use std::{env, fs};
 
 mod server_00;
+mod server_01;
 
-const SERVERS: [fn(TcpStream); 1] = [server_00::run as fn(TcpStream)];
+const SERVERS: [fn(TcpStream); 2] = [
+    server_00::run as fn(TcpStream),
+    server_01::run as fn(TcpStream),
+];
 
 fn get_part() -> Result<u8, &'static str> {
     let args: Vec<String> = env::args().collect();
