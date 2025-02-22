@@ -46,11 +46,12 @@ fn get_ip() -> Result<String, &'static str> {
     Ok(ip.trim().to_string())
 }
 
-fn run_server(ip: &str, port: u32, handle_client: fn(TcpStream)) {
-    println!("Running server");
+fn run_server(ip: &str, port: u32, server_index: usize) {
+    println!("Running server {server_index:02}");
     let listener = TcpListener::bind(format!("{ip}:{port}")).unwrap();
     for stream in listener.incoming() {
-        thread::spawn(move || handle_client(stream.unwrap()));
+        println!("Connection established!");
+        thread::spawn(move || SERVERS[server_index](stream.unwrap()));
     }
 }
 
@@ -62,5 +63,5 @@ pub fn get_server() -> Result<Box<dyn Fn()>, &'static str> {
     }
     let ip = get_ip()?;
     let port = 12233;
-    Ok(Box::new(move || run_server(&ip, port, SERVERS[part])))
+    Ok(Box::new(move || run_server(&ip, port, part)))
 }
