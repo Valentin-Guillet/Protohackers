@@ -1,8 +1,11 @@
+use std::net::{TcpListener, TcpStream};
+use std::process::Command;
+use std::thread;
 use std::{env, fs};
 
 mod server_00;
 
-const SERVERS: [fn(); 1] = [server_00::run as fn()];
+const SERVERS: [fn(TcpStream); 1] = [server_00::run as fn(TcpStream)];
 
 fn get_part() -> Result<u8, &'static str> {
     let args: Vec<String> = env::args().collect();
@@ -33,10 +36,31 @@ fn get_part() -> Result<u8, &'static str> {
         .ok_or("no source file found")
 }
 
-pub fn get_server() -> Result<fn(), &'static str> {
-    const N: usize = SERVERS.len();
-    match get_part()? as usize {
-        part @ 0..N => Ok(*SERVERS.get(part).unwrap()),
-        _ => Err("part not found"),
+fn get_ip() -> Result<String, &'static str> {
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(r"ip -f inet addr show wlo1 | sed -En -e 's/.*inet ([0-9.]+).*/\1/p'")
+        .output()
+        .map_err(|_| "could not read ip")?;
+    let ip = String::from_utf8(output.stdout).map_err(|_| "could not parse ip")?;
+    Ok(ip.trim().to_string())
+}
+
+fn run_server(ip: &str, port: u32, handle_client: fn(TcpStream)) {
+    println!("Running server");
+    let listener = TcpListener::bind(format!("{ip}:{port}")).unwrap();
+    for stream in listener.incoming() {
+        thread::spawn(move || handle_client(stream.unwrap()));
     }
+}
+
+pub fn get_server() -> Result<Box<dyn Fn()>, &'static str> {
+    let part = get_part()? as usize;
+
+    if part >= SERVERS.len() {
+        return Err("part not found");
+    }
+    let ip = get_ip()?;
+    let port = 12233;
+    Ok(Box::new(move || run_server(&ip, port, SERVERS[part])))
 }
