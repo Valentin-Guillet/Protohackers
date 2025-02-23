@@ -3,13 +3,20 @@ use std::process::Command;
 use std::thread;
 use std::{env, fs};
 
-mod server_00;
-mod server_01;
+macro_rules! load_server {
+    (@replace_expr $s:ident $sub:expr) => { $sub };
+    (@count_servers $($server:ident)*) => { 0usize $(+ load_server!(@replace_expr $server 1usize))* };
 
-const SERVERS: [fn(TcpStream); 2] = [
-    server_00::run as fn(TcpStream),
-    server_01::run as fn(TcpStream),
-];
+    ($($server:ident),*) => {
+        $(mod $server;)*
+        const NB_SERVERS: usize = load_server!(@count_servers $($server)*);
+        const SERVERS: [fn(TcpStream); NB_SERVERS] = [
+            $($server::run as fn(TcpStream),)*
+        ];
+    };
+}
+
+load_server!(server_00, server_01);
 
 fn get_part() -> Result<u8, &'static str> {
     let args: Vec<String> = env::args().collect();
