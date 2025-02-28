@@ -1,7 +1,6 @@
-use std::{
-    io::{Read, Write},
-    net::TcpStream,
-};
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::thread;
 
 fn get_response(data: &mut Vec<(i32, i32)>, buf: &[u8]) -> Option<i32> {
     let query_type: char = char::from(buf[0]);
@@ -31,8 +30,8 @@ fn get_response(data: &mut Vec<(i32, i32)>, buf: &[u8]) -> Option<i32> {
     }
 }
 
-pub fn run(mut stream: TcpStream) {
-    let mut data = Database::new();
+fn handle_connection(mut stream: TcpStream) {
+    let mut data = Vec::new();
     let mut requests: Vec<u8> = Vec::new();
     loop {
         let mut read = [0; 4096];
@@ -53,5 +52,14 @@ pub fn run(mut stream: TcpStream) {
                 }
             }
         }
+    }
+}
+
+pub fn run(ip: &str, port: u32) {
+    println!("Running server 02");
+    let listener = TcpListener::bind(format!("{ip}:{port}")).unwrap();
+    for stream in listener.incoming() {
+        println!("Connection established!");
+        thread::spawn(move || handle_connection(stream.unwrap()));
     }
 }

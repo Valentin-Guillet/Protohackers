@@ -1,6 +1,4 @@
-use std::net::{TcpListener, TcpStream};
 use std::process::Command;
-use std::thread;
 use std::{env, fs};
 
 macro_rules! load_server {
@@ -10,8 +8,8 @@ macro_rules! load_server {
     ($($server:ident),*) => {
         $(mod $server;)*
         const NB_SERVERS: usize = load_server!(@count_servers $($server)*);
-        const SERVERS: [fn(TcpStream); NB_SERVERS] = [
-            $($server::run as fn(TcpStream),)*
+        const SERVER_RUNS: [fn(&str, u32); NB_SERVERS] = [
+            $($server::run as fn(&str, u32),)*
         ];
     };
 }
@@ -57,22 +55,13 @@ fn get_ip() -> Result<String, &'static str> {
     Ok(ip.trim().to_string())
 }
 
-fn run_server(ip: &str, port: u32, server_index: usize) {
-    println!("Running server {server_index:02}");
-    let listener = TcpListener::bind(format!("{ip}:{port}")).unwrap();
-    for stream in listener.incoming() {
-        println!("Connection established!");
-        thread::spawn(move || SERVERS[server_index](stream.unwrap()));
-    }
-}
-
 pub fn get_server() -> Result<Box<dyn Fn()>, &'static str> {
     let part = get_part()? as usize;
 
-    if part >= SERVERS.len() {
+    if part >= SERVER_RUNS.len() {
         return Err("part not found");
     }
     let ip = get_ip()?;
     let port = 12233;
-    Ok(Box::new(move || run_server(&ip, port, part)))
+    Ok(Box::new(move || SERVER_RUNS[part](&ip, port)))
 }

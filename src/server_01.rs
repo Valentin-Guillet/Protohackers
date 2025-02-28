@@ -1,7 +1,6 @@
-use std::{
-    io::{Read, Write},
-    net::TcpStream,
-};
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::thread;
 
 use serde_json::json;
 
@@ -49,7 +48,7 @@ fn get_response(buf: &str) -> Option<String> {
     Some(response.to_string() + "\n")
 }
 
-pub fn run(mut stream: TcpStream) {
+pub fn handle_connection(mut stream: TcpStream) {
     let mut requests = String::new();
     loop {
         let mut read = [0; 4096];
@@ -69,5 +68,14 @@ pub fn run(mut stream: TcpStream) {
                 }
             }
         }
+    }
+}
+
+pub fn run(ip: &str, port: u32) {
+    println!("Running server 01");
+    let listener = TcpListener::bind(format!("{ip}:{port}")).unwrap();
+    for stream in listener.incoming() {
+        println!("Connection established!");
+        thread::spawn(move || handle_connection(stream.unwrap()));
     }
 }
