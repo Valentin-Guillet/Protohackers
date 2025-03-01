@@ -27,3 +27,22 @@ pub fn read_until(stream: &mut TcpStream, buffer: &mut [u8], limit: char) -> Opt
 
     Some(data)
 }
+
+pub fn read_for(stream: &mut TcpStream, buffer: &mut Vec<u8>, nb_bytes: usize) -> Option<Vec<u8>> {
+    let mut data = Vec::new();
+    let mut data_len = buffer.len();
+
+    while data.len() + data_len < nb_bytes {
+        data.extend(buffer.iter());
+        let mut buf = [0; 1024];
+        data_len = match stream.read(&mut buf) {
+            Err(err) => panic!("{}", err),
+            Ok(0) => return None,
+            Ok(n) => n,
+        };
+        *buffer = buf[..data_len].to_vec();
+    }
+
+    data.extend(buffer.drain(..nb_bytes - data.len()));
+    Some(data)
+}

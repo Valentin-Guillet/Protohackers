@@ -1,6 +1,8 @@
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::thread;
+
+use crate::utils;
 
 fn get_response(data: &mut Vec<(i32, i32)>, buf: &[u8]) -> Option<i32> {
     let query_type: char = char::from(buf[0]);
@@ -32,25 +34,12 @@ fn get_response(data: &mut Vec<(i32, i32)>, buf: &[u8]) -> Option<i32> {
 
 fn handle_connection(mut stream: TcpStream) {
     let mut data = Vec::new();
-    let mut requests: Vec<u8> = Vec::new();
-    loop {
-        let mut read = [0; 4096];
-        match stream.read(&mut read) {
-            Err(err) => panic!("{}", err),
-            Ok(0) => break,
-            Ok(n) => {
-                requests.extend_from_slice(&read[0..n]);
-                while requests.len() >= 9 {
-                    let request: Vec<u8> = requests.drain(..9).collect();
-                    let response = get_response(&mut data, &request);
-
-                    if response.is_some()
-                        && stream.write_all(&response.unwrap().to_be_bytes()).is_err()
-                    {
-                        break;
-                    }
-                }
-            }
+    let mut buffer: Vec<u8> = Vec::new();
+    while let Some(request) = utils::read_for(&mut stream, &mut buffer, 9) {
+        println!("Request: {:?}", request);
+        let response = get_response(&mut data, &request);
+        if response.is_some() && stream.write_all(&response.unwrap().to_be_bytes()).is_err() {
+            break;
         }
     }
 }
