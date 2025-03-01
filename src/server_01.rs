@@ -1,8 +1,10 @@
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 
 use serde_json::json;
+
+use crate::utils;
 
 fn is_prime(n: f64) -> bool {
     if n.fract() != 0.0 || n < 2.0 {
@@ -49,24 +51,12 @@ fn get_response(buf: &str) -> Option<String> {
 }
 
 pub fn handle_connection(mut stream: TcpStream) {
-    let mut requests = String::new();
-    loop {
-        let mut read = [0; 4096];
-        match stream.read(&mut read) {
-            Err(err) => panic!("{}", err),
-            Ok(0) => break,
-            Ok(n) => {
-                requests.push_str(&String::from_utf8_lossy(&read[0..n]));
-                while requests.contains("\n") {
-                    let request: String =
-                        requests.drain(..requests.find("\n").unwrap() + 1).collect();
-                    let response = get_response(&request).unwrap_or(String::from("{}\n"));
-                    println!("Request {} -> response {}", request.trim(), response.trim());
-                    if stream.write_all(response.as_bytes()).is_err() {
-                        break;
-                    }
-                }
-            }
+    let mut buffer = [0; 1024];
+    while let Some(request) = utils::read_until(&mut stream, &mut buffer, '\n') {
+        let response = get_response(&request).unwrap_or(String::from("{}\n"));
+        println!("Request {} -> response {}", request.trim(), response.trim());
+        if stream.write_all(response.as_bytes()).is_err() {
+            break;
         }
     }
 }

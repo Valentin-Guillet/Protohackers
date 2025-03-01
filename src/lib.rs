@@ -1,6 +1,8 @@
 use std::process::Command;
 use std::{env, fs};
 
+mod utils;
+
 macro_rules! load_server {
     (@replace_expr $s:ident $sub:expr) => { $sub };
     (@count_servers $($server:ident)*) => { 0usize $(+ load_server!(@replace_expr $server 1usize))* };
