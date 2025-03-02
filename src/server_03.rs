@@ -1,12 +1,14 @@
+use async_trait::async_trait;
 use std::collections::HashMap;
-use std::io::Write;
-use std::net::TcpStream;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
+use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
+use tokio::sync::Mutex;
 
 use crate::{utils, TcpServer};
 
 pub struct Server {
-    connections: Arc<Mutex<HashMap<String, TcpStream>>>,
+    connections: Arc<Mutex<HashMap<String, OwnedWriteHalf>>>,
 }
 
 impl Server {
@@ -20,67 +22,73 @@ impl Server {
         name.chars().all(|c| c.is_alphanumeric())
     }
 
-    fn add_user(&self, username: &str, stream: TcpStream) {
+    async fn add_user(&self, username: &str, writer: OwnedWriteHalf) {
         self.connections
             .lock()
-            .unwrap()
-            .insert(username.to_string(), stream);
+            .await
+            .insert(username.to_string(), writer);
     }
 
-    fn remove_user(&self, username: &str) {
-        self.connections.lock().unwrap().remove(username);
+    async fn remove_user(&self, username: &str) {
+        self.connections.lock().await.remove(username);
     }
 
-    fn send_to(&self, username: &str, msg: &str) {
-        let mut connections = self.connections.lock().unwrap();
-        let stream = connections.get_mut(username).unwrap();
-        stream.write_all(msg.as_bytes()).unwrap();
+    async fn send_to(&self, username: &str, msg: &str) {
+        let mut connections = self.connections.lock().await;
+        let writer = connections.get_mut(username).unwrap();
+        writer.write_all(msg.as_bytes()).await.unwrap();
     }
 
-    fn broadcast_from(&self, username: &str, msg: &str) {
-        for (name, stream) in self.connections.lock().unwrap().iter_mut() {
+    async fn broadcast_from(&self, username: &str, msg: &str) {
+        for (name, writer) in self.connections.lock().await.iter_mut() {
             if name != username {
-                stream.write_all(msg.as_bytes()).unwrap();
+                writer.write_all(msg.as_bytes()).await.unwrap();
             }
         }
     }
 
-    fn broadcast_chat(&self, from: &str, msg: &str) {
-        self.broadcast_from(from, &format!("[{from}] {msg}\n"));
+    async fn broadcast_chat(&self, from: &str, msg: &str) {
+        self.broadcast_from(from, &format!("[{from}] {msg}\n"))
+            .await;
     }
 }
 
+#[async_trait]
 impl TcpServer for Server {
-    fn handle_connection(&self, mut stream: TcpStream) {
+    async fn handle_connection(&self, stream: TcpStream) {
         let mut buffer = [0; 1024];
-        stream
+
+        let (mut reader, mut writer) = stream.into_split();
+        writer
             .write_all("Welcome to budgetchat! What shall I call you?\n".as_bytes())
+            .await
             .unwrap();
 
-        let username = match utils::read_until(&mut stream, &mut buffer, '\n') {
+        let username = match utils::read_until(&mut reader, &mut buffer, '\n').await {
             None => return,
             Some(name) if !Self::is_valid(&name) => return,
             Some(name) => name,
         };
 
-        let mut welcome_msg = String::from("* The room contains: ");
-        let connections = self.connections.lock().unwrap();
-        welcome_msg.push_str(&connections.keys().cloned().collect::<Vec<_>>().join(", "));
-        welcome_msg.push('\n');
+        let connections = self.connections.lock().await;
+        let welcome_msg = format!(
+            "* The room contains {}\n",
+            connections.keys().cloned().collect::<Vec<_>>().join(", ")
+        );
         drop(connections);
 
-        self.add_user(&username, stream.try_clone().unwrap());
-        self.send_to(&username, &welcome_msg);
+        self.add_user(&username, writer).await;
+        self.send_to(&username, &welcome_msg).await;
 
         let join_msg = format!("* {username} has entered the room\n");
-        self.broadcast_from(&username, &join_msg);
+        self.broadcast_from(&username, &join_msg).await;
 
-        while let Some(msg) = utils::read_until(&mut stream, &mut buffer, '\n') {
-            self.broadcast_chat(&username, &msg);
+        while let Some(msg) = utils::read_until(&mut reader, &mut buffer, '\n').await {
+            self.broadcast_chat(&username, &msg).await;
         }
 
-        self.remove_user(&username);
+        self.remove_user(&username).await;
         let exit_msg = format!("* {username} has left the room\n");
-        self.broadcast_from(&username, &exit_msg);
+        self.broadcast_from(&username, &exit_msg).await;
     }
 }

@@ -1,5 +1,6 @@
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use async_trait::async_trait;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 
 use crate::TcpServer;
 
@@ -10,15 +11,16 @@ impl Server {
     }
 }
 
+#[async_trait]
 impl TcpServer for Server {
-    fn handle_connection(&self, mut stream: TcpStream) {
+    async fn handle_connection(&self, mut stream: TcpStream) {
         loop {
             let mut buffer = [0; 1024];
-            match stream.read(&mut buffer) {
+            match stream.read(&mut buffer).await {
                 Ok(0) => break,
-                Ok(n) => stream.write_all(&buffer[0..n]).unwrap(),
+                Ok(n) => stream.write(&buffer[0..n]).await.unwrap(),
                 Err(err) => panic!("{}", err),
-            }
+            };
         }
     }
 }

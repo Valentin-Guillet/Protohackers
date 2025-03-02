@@ -1,7 +1,10 @@
-use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
+use std::net::SocketAddr;
 use std::process::Command;
 use std::sync::Arc;
-use std::{env, fs, thread};
+use std::{env, fs};
+
+use async_trait::async_trait;
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
 
 mod server_00;
 mod server_01;
@@ -49,12 +52,14 @@ pub fn get_ip() -> Result<String, &'static str> {
     Ok(ip.trim().to_string())
 }
 
+#[async_trait]
 pub trait TcpServer: Send + Sync {
-    fn handle_connection(&self, stream: TcpStream);
+    async fn handle_connection(&self, mut stream: TcpStream);
 }
 
+#[async_trait]
 pub trait UdpServer: Send + Sync {
-    fn handle_connection(&self, socket: &UdpSocket, data: &[u8], sender: &SocketAddr);
+    async fn handle_connection(&self, socket: &UdpSocket, data: &[u8], sender: &SocketAddr);
 }
 
 pub enum ServerType {
@@ -77,42 +82,36 @@ impl Server {
             4 => ServerType::Udp(Arc::new(server_04::Server::new())),
             _ => return Err("invalid challenge number"),
         };
-        Ok(Self {
-            part,
-            server,
-        })
+        Ok(Self { part, server })
     }
-    pub fn run(self, ip: &str, port: u32) {
+    pub async fn run(self, ip: &str, port: u32) {
         println!("Running server {}", self.part);
         match self.server {
-            ServerType::Tcp(server) => Self::run_tcp(server, ip, port),
-            ServerType::Udp(server) => Self::run_udp(server, ip, port),
+            ServerType::Tcp(server) => Self::run_tcp(server, ip, port).await,
+            ServerType::Udp(server) => Self::run_udp(server, ip, port).await,
         }
     }
 
-    fn run_tcp(server: Arc<dyn TcpServer>, ip: &str, port: u32) {
-        let listener = TcpListener::bind(format!("{ip}:{port}")).unwrap();
-        for stream in listener.incoming() {
-            let stream = stream.unwrap();
+    async fn run_tcp(server: Arc<dyn TcpServer>, ip: &str, port: u32) {
+        let listener = TcpListener::bind(format!("{ip}:{port}")).await.unwrap();
+
+        loop {
+            let (stream, _) = listener.accept().await.unwrap();
             println!("Connection established!");
 
             let server = Arc::clone(&server);
-            thread::spawn(move || server.handle_connection(stream));
+            tokio::spawn(async move { server.handle_connection(stream).await });
         }
     }
 
-    fn run_udp(server: Arc<dyn UdpServer>, ip: &str, port: u32) {
-        let socket = Arc::new(UdpSocket::bind(format!("{ip}:{port}")).unwrap());
+    async fn run_udp(server: Arc<dyn UdpServer>, ip: &str, port: u32) {
+        let socket = Arc::new(UdpSocket::bind(format!("{ip}:{port}")).await.unwrap());
         loop {
             let mut buffer = [0; 1024];
-            match socket.recv_from(&mut buffer) {
-                Err(_) => break,
-                Ok((n, addr)) => {
-                    let server = Arc::clone(&server);
-                    let socket = Arc::clone(&socket);
-                    thread::spawn(move || server.handle_connection(&socket, &buffer[..n], &addr));
-                }
-            }
+            let (n, addr) = socket.recv_from(&mut buffer).await.unwrap();
+            let server = Arc::clone(&server);
+            let socket = Arc::clone(&socket);
+            tokio::spawn(async move { server.handle_connection(&socket, &buffer[..n], &addr).await });
         }
     }
 }

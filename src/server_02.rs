@@ -1,5 +1,6 @@
-use std::io::Write;
-use std::net::TcpStream;
+use async_trait::async_trait;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
 
 use crate::{utils, TcpServer};
 
@@ -37,14 +38,15 @@ impl Server {
     }
 }
 
+#[async_trait]
 impl TcpServer for Server {
-    fn handle_connection(&self, mut stream: TcpStream) {
+    async fn handle_connection(&self, mut stream: TcpStream) {
         let mut data = Vec::new();
         let mut buffer: Vec<u8> = Vec::new();
-        while let Some(request) = utils::read_for(&mut stream, &mut buffer, 9) {
+        while let Some(request) = utils::read_for(&mut stream, &mut buffer, 9).await {
             println!("Request: {:?}", request);
             let response = Self::get_response(&mut data, &request);
-            if response.is_some() && stream.write_all(&response.unwrap().to_be_bytes()).is_err() {
+            if response.is_some() && stream.write_all(&response.unwrap().to_be_bytes()).await.is_err() {
                 break;
             }
         }

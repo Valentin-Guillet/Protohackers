@@ -1,6 +1,8 @@
 use std::collections::HashMap;
-use std::net::UdpSocket;
 use std::sync::{Arc, RwLock};
+
+use async_trait::async_trait;
+use tokio::net::UdpSocket;
 
 use crate::UdpServer;
 
@@ -38,12 +40,13 @@ impl Server {
     }
 }
 
+#[async_trait]
 impl UdpServer for Server {
-    fn handle_connection(&self, socket: &UdpSocket, data: &[u8], addr: &std::net::SocketAddr) {
+    async fn handle_connection(&self, socket: &UdpSocket, data: &[u8], addr: &std::net::SocketAddr) {
         let request = String::from_utf8_lossy(data);
 
         if let Some(response) = self.process_request(&request) {
-            socket.send_to(response.as_bytes(), addr).unwrap();
+            socket.send_to(response.as_bytes(), addr).await.unwrap();
         }
     }
 }

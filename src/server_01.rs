@@ -1,7 +1,7 @@
-use std::io::Write;
-use std::net::TcpStream;
-
+use async_trait::async_trait;
 use serde_json::json;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
 
 use crate::{utils, TcpServer};
 
@@ -56,13 +56,14 @@ impl Server {
     }
 }
 
+#[async_trait]
 impl TcpServer for Server {
-    fn handle_connection(&self, mut stream: TcpStream) {
+    async fn handle_connection(&self, mut stream: TcpStream) {
         let mut buffer = [0; 1024];
-        while let Some(request) = utils::read_until(&mut stream, &mut buffer, '\n') {
+        while let Some(request) = utils::read_until(&mut stream, &mut buffer, '\n').await {
             let response = Self::get_response(&request).unwrap_or(String::from("{}\n"));
             println!("Request {} -> response {}", request.trim(), response.trim());
-            if stream.write_all(response.as_bytes()).is_err() {
+            if stream.write_all(response.as_bytes()).await.is_err() {
                 break;
             }
         }
