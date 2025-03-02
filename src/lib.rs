@@ -16,7 +16,7 @@ macro_rules! load_server {
     };
 }
 
-load_server!(server_00, server_01, server_02, server_03);
+load_server!(server_00, server_01, server_02, server_03, server_04);
 
 fn get_part() -> Result<u8, &'static str> {
     let args: Vec<String> = env::args().collect();
