@@ -1,96 +1,86 @@
 use std::collections::HashMap;
 use std::io::Write;
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
-use std::thread;
 
-use crate::utils::{self, read_until};
+use crate::{utils, TcpServer};
 
-fn is_valid(name: &str) -> bool {
-    name.chars().all(|c| c.is_alphanumeric())
+pub struct Server {
+    connections: Arc<Mutex<HashMap<String, TcpStream>>>,
 }
 
-struct State {
-    connections: HashMap<String, TcpStream>,
-}
-
-impl State {
-    fn new() -> Self {
+impl Server {
+    pub fn new() -> Self {
         Self {
-            connections: HashMap::new(),
+            connections: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    fn add_user(&mut self, username: &str, stream: TcpStream) {
-        self.connections.insert(username.to_string(), stream);
+    fn is_valid(name: &str) -> bool {
+        name.chars().all(|c| c.is_alphanumeric())
     }
 
-    fn remove_user(&mut self, username: &str) {
-        self.connections.remove(username);
+    fn add_user(&self, username: &str, stream: TcpStream) {
+        self.connections
+            .lock()
+            .unwrap()
+            .insert(username.to_string(), stream);
     }
 
-    fn send_to(&mut self, username: &str, msg: &str) {
-        let stream = self.connections.get_mut(username).unwrap();
+    fn remove_user(&self, username: &str) {
+        self.connections.lock().unwrap().remove(username);
+    }
+
+    fn send_to(&self, username: &str, msg: &str) {
+        let mut connections = self.connections.lock().unwrap();
+        let stream = connections.get_mut(username).unwrap();
         stream.write_all(msg.as_bytes()).unwrap();
     }
 
-    fn broadcast_from(&mut self, username: &str, msg: &str) {
-        for (name, stream) in self.connections.iter_mut() {
+    fn broadcast_from(&self, username: &str, msg: &str) {
+        for (name, stream) in self.connections.lock().unwrap().iter_mut() {
             if name != username {
                 stream.write_all(msg.as_bytes()).unwrap();
             }
         }
     }
 
-    fn broadcast_chat(&mut self, from: &str, msg: &str) {
+    fn broadcast_chat(&self, from: &str, msg: &str) {
         self.broadcast_from(from, &format!("[{from}] {msg}\n"));
     }
 }
 
-fn handle_connection(mut stream: TcpStream, shared_state: Arc<Mutex<State>>) {
-    let mut buffer = [0; 1024];
-    stream.write_all("Welcome to budgetchat! What shall I call you?\n".as_bytes()).unwrap();
+impl TcpServer for Server {
+    fn handle_connection(&self, mut stream: TcpStream) {
+        let mut buffer = [0; 1024];
+        stream
+            .write_all("Welcome to budgetchat! What shall I call you?\n".as_bytes())
+            .unwrap();
 
-    let username = match read_until(&mut stream, &mut buffer, '\n') {
-        None => return,
-        Some(name) if !is_valid(&name) => return,
-        Some(name) => name,
-    };
+        let username = match utils::read_until(&mut stream, &mut buffer, '\n') {
+            None => return,
+            Some(name) if !Self::is_valid(&name) => return,
+            Some(name) => name,
+        };
 
-    let mut state = shared_state.lock().unwrap();
-    let mut welcome_msg = String::from("* The room contains: ");
-    welcome_msg.push_str(&state.connections.keys().cloned().collect::<Vec<_>>().join(", "));
-    welcome_msg.push('\n');
+        let mut welcome_msg = String::from("* The room contains: ");
+        let connections = self.connections.lock().unwrap();
+        welcome_msg.push_str(&connections.keys().cloned().collect::<Vec<_>>().join(", "));
+        welcome_msg.push('\n');
+        drop(connections);
 
-    state.add_user(&username, stream.try_clone().unwrap());
-    state.send_to(&username, &welcome_msg);
+        self.add_user(&username, stream.try_clone().unwrap());
+        self.send_to(&username, &welcome_msg);
 
-    let join_msg = format!("* {username} has entered the room\n");
-    state.broadcast_from(&username, &join_msg);
+        let join_msg = format!("* {username} has entered the room\n");
+        self.broadcast_from(&username, &join_msg);
 
-    drop(state);  // free the mutex
-    while let Some(msg) = utils::read_until(&mut stream, &mut buffer, '\n') {
-        let mut state = shared_state.lock().unwrap();
-        state.broadcast_chat(&username, &msg);
-    }
+        while let Some(msg) = utils::read_until(&mut stream, &mut buffer, '\n') {
+            self.broadcast_chat(&username, &msg);
+        }
 
-    let mut state = shared_state.lock().unwrap();
-    state.remove_user(&username);
-    let exit_msg = format!("* {username} has left the room\n");
-    state.broadcast_from(&username, &exit_msg);
-}
-
-pub fn run(ip: &str, port: u32) {
-    println!("Running server 03");
-
-    let state = Arc::new(Mutex::new(State::new()));
-
-    let listener = TcpListener::bind(format!("{ip}:{port}")).unwrap();
-
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        println!("Connection established!");
-        let state = Arc::clone(&state);
-        thread::spawn(move || handle_connection(stream, state));
+        self.remove_user(&username);
+        let exit_msg = format!("* {username} has left the room\n");
+        self.broadcast_from(&username, &exit_msg);
     }
 }

@@ -1,10 +1,9 @@
 use std::io::Write;
-use std::net::{TcpListener, TcpStream};
-use std::thread;
+use std::net::TcpStream;
 
 use serde_json::json;
 
-use crate::utils;
+use crate::{utils, TcpServer};
 
 fn is_prime(n: f64) -> bool {
     if n.fract() != 0.0 || n < 2.0 {
@@ -31,41 +30,41 @@ fn is_prime(n: f64) -> bool {
     true
 }
 
-fn get_response(buf: &str) -> Option<String> {
-    let object: serde_json::Value = serde_json::from_str(buf).ok()?;
-    let object = object.as_object()?;
-
-    let method = object.get("method")?.as_str()?;
-    let number = object.get("number")?.as_f64()?;
-
-    if method != "isPrime" {
-        return None;
+pub struct Server {}
+impl Server {
+    pub fn new() -> Self {
+        Self {}
     }
 
-    let response = json!({
-        "method": "isPrime",
-        "prime": is_prime(number)
-    });
+    fn get_response(buf: &str) -> Option<String> {
+        let object: serde_json::Value = serde_json::from_str(buf).ok()?;
+        let object = object.as_object()?;
 
-    Some(response.to_string() + "\n")
-}
+        let method = object.get("method")?.as_str()?;
+        let number = object.get("number")?.as_f64()?;
 
-pub fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0; 1024];
-    while let Some(request) = utils::read_until(&mut stream, &mut buffer, '\n') {
-        let response = get_response(&request).unwrap_or(String::from("{}\n"));
-        println!("Request {} -> response {}", request.trim(), response.trim());
-        if stream.write_all(response.as_bytes()).is_err() {
-            break;
+        if method != "isPrime" {
+            return None;
         }
+
+        let response = json!({
+            "method": "isPrime",
+            "prime": is_prime(number)
+        });
+
+        Some(response.to_string() + "\n")
     }
 }
 
-pub fn run(ip: &str, port: u32) {
-    println!("Running server 01");
-    let listener = TcpListener::bind(format!("{ip}:{port}")).unwrap();
-    for stream in listener.incoming() {
-        println!("Connection established!");
-        thread::spawn(move || handle_connection(stream.unwrap()));
+impl TcpServer for Server {
+    fn handle_connection(&self, mut stream: TcpStream) {
+        let mut buffer = [0; 1024];
+        while let Some(request) = utils::read_until(&mut stream, &mut buffer, '\n') {
+            let response = Self::get_response(&request).unwrap_or(String::from("{}\n"));
+            println!("Request {} -> response {}", request.trim(), response.trim());
+            if stream.write_all(response.as_bytes()).is_err() {
+                break;
+            }
+        }
     }
 }

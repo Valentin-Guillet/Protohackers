@@ -1,24 +1,16 @@
+use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::process::Command;
-use std::{env, fs};
+use std::sync::Arc;
+use std::{env, fs, thread};
 
+mod server_00;
+mod server_01;
+mod server_02;
+mod server_03;
+mod server_04;
 mod utils;
 
-macro_rules! load_server {
-    (@replace_expr $s:ident $sub:expr) => { $sub };
-    (@count_servers $($server:ident)*) => { 0usize $(+ load_server!(@replace_expr $server 1usize))* };
-
-    ($($server:ident),*) => {
-        $(mod $server;)*
-        const NB_SERVERS: usize = load_server!(@count_servers $($server)*);
-        const SERVER_RUNS: [fn(&str, u32); NB_SERVERS] = [
-            $($server::run as fn(&str, u32),)*
-        ];
-    };
-}
-
-load_server!(server_00, server_01, server_02, server_03, server_04);
-
-fn get_part() -> Result<u8, &'static str> {
+pub fn get_challenge() -> Result<u8, &'static str> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() >= 2 {
@@ -47,7 +39,7 @@ fn get_part() -> Result<u8, &'static str> {
         .ok_or("no source file found")
 }
 
-fn get_ip() -> Result<String, &'static str> {
+pub fn get_ip() -> Result<String, &'static str> {
     let output = Command::new("sh")
         .arg("-c")
         .arg(r"ip -f inet addr show wlo1 | sed -En -e 's/.*inet ([0-9.]+).*/\1/p'")
@@ -57,13 +49,70 @@ fn get_ip() -> Result<String, &'static str> {
     Ok(ip.trim().to_string())
 }
 
-pub fn get_server() -> Result<Box<dyn Fn()>, &'static str> {
-    let part = get_part()? as usize;
+pub trait TcpServer: Send + Sync {
+    fn handle_connection(&self, stream: TcpStream);
+}
 
-    if part >= SERVER_RUNS.len() {
-        return Err("part not found");
+pub trait UdpServer: Send + Sync {
+    fn handle_connection(&self, socket: &UdpSocket, data: &[u8], sender: &SocketAddr);
+}
+
+pub enum ServerType {
+    Tcp(Arc<dyn TcpServer>),
+    Udp(Arc<dyn UdpServer>),
+}
+
+pub struct Server {
+    part: u8,
+    server: ServerType,
+}
+
+impl Server {
+    pub fn new(part: u8) -> Result<Self, &'static str> {
+        let server = match part {
+            0 => ServerType::Tcp(Arc::new(server_00::Server::new())),
+            1 => ServerType::Tcp(Arc::new(server_01::Server::new())),
+            2 => ServerType::Tcp(Arc::new(server_02::Server::new())),
+            3 => ServerType::Tcp(Arc::new(server_03::Server::new())),
+            4 => ServerType::Udp(Arc::new(server_04::Server::new())),
+            _ => return Err("invalid challenge number"),
+        };
+        Ok(Self {
+            part,
+            server,
+        })
     }
-    let ip = get_ip()?;
-    let port = 12233;
-    Ok(Box::new(move || SERVER_RUNS[part](&ip, port)))
+    pub fn run(self, ip: &str, port: u32) {
+        println!("Running server {}", self.part);
+        match self.server {
+            ServerType::Tcp(server) => Self::run_tcp(server, ip, port),
+            ServerType::Udp(server) => Self::run_udp(server, ip, port),
+        }
+    }
+
+    fn run_tcp(server: Arc<dyn TcpServer>, ip: &str, port: u32) {
+        let listener = TcpListener::bind(format!("{ip}:{port}")).unwrap();
+        for stream in listener.incoming() {
+            let stream = stream.unwrap();
+            println!("Connection established!");
+
+            let server = Arc::clone(&server);
+            thread::spawn(move || server.handle_connection(stream));
+        }
+    }
+
+    fn run_udp(server: Arc<dyn UdpServer>, ip: &str, port: u32) {
+        let socket = Arc::new(UdpSocket::bind(format!("{ip}:{port}")).unwrap());
+        loop {
+            let mut buffer = [0; 1024];
+            match socket.recv_from(&mut buffer) {
+                Err(_) => break,
+                Ok((n, addr)) => {
+                    let server = Arc::clone(&server);
+                    let socket = Arc::clone(&socket);
+                    thread::spawn(move || server.handle_connection(&socket, &buffer[..n], &addr));
+                }
+            }
+        }
+    }
 }
