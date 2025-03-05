@@ -64,8 +64,7 @@ pub async fn read_for(
         data.extend(buffer.iter());
         let mut buf = [0; 1024];
         data_len = match stream.read(&mut buf).await {
-            Err(err) => panic!("{}", err),
-            Ok(0) => return None,
+            Ok(0) | Err(_) => return None,
             Ok(n) => n,
         };
         *buffer = buf[..data_len].to_vec();

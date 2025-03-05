@@ -12,6 +12,7 @@ mod server_02;
 mod server_03;
 mod server_04;
 mod server_05;
+mod server_06;
 mod utils;
 
 pub fn get_challenge() -> Result<u8, &'static str> {
@@ -60,7 +61,7 @@ pub trait TcpServer: Send + Sync {
 
 #[async_trait]
 pub trait UdpServer: Send + Sync {
-    async fn handle_connection(&self, socket: &UdpSocket, data: &[u8], sender: &SocketAddr);
+    async fn handle_connection(&self, socket: &UdpSocket, data: &[u8], addr: &SocketAddr);
 }
 
 pub enum ServerType {
@@ -82,6 +83,7 @@ impl Server {
             3 => ServerType::Tcp(Arc::new(server_03::Server::new())),
             4 => ServerType::Udp(Arc::new(server_04::Server::new())),
             5 => ServerType::Tcp(Arc::new(server_05::Server::new())),
+            6 => ServerType::Tcp(Arc::new(server_06::Server::new())),
             _ => return Err("invalid challenge number"),
         };
         Ok(Self { part, server })
