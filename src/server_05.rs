@@ -3,10 +3,10 @@ use std::sync::LazyLock;
 use async_trait::async_trait;
 use fancy_regex::Regex;
 use tokio::io::AsyncWriteExt;
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
-use crate::{utils, TcpServer};
+use crate::{TcpServer, utils};
 
 static BOGUSCOIN_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?<=^| )7[[:alnum:]]{25,34}(?=$| )").unwrap());
@@ -53,4 +53,3 @@ impl TcpServer for Server {
         let _ = thread_2.await.unwrap();
     }
 }
-

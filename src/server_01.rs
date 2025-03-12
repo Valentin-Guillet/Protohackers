@@ -3,7 +3,7 @@ use serde_json::json;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
-use crate::{utils, TcpServer};
+use crate::{TcpServer, utils};
 
 fn is_prime(n: f64) -> bool {
     if n.fract() != 0.0 || n < 2.0 {

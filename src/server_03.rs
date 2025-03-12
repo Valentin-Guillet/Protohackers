@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
-use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
+use tokio::net::{TcpStream, tcp::OwnedWriteHalf};
 use tokio::sync::Mutex;
 
-use crate::{utils, TcpServer};
+use crate::{TcpServer, utils};
 
 pub struct Server {
     connections: Arc<Mutex<HashMap<String, OwnedWriteHalf>>>,

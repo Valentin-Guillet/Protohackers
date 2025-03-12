@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use tokio::io::{self, AsyncReadExt};
-use tokio::net::{tcp::OwnedReadHalf, TcpStream};
+use tokio::net::{TcpStream, tcp::OwnedReadHalf};
 
 #[async_trait]
 pub trait AsyncReadHalf {

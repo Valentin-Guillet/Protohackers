@@ -2,12 +2,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::Mutex;
 use tokio::time;
 
-use crate::{utils, TcpServer};
+use crate::{TcpServer, utils};
 
 type ServerResult = Result<Vec<ServerMessage>, &'static str>;
 

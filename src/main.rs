@@ -1,6 +1,6 @@
 use std::process;
 
-use proto_hackers::{get_challenge, get_ip, Server};
+use proto_hackers::{Server, get_challenge, get_ip};
 
 #[tokio::main]
 async fn main() {
