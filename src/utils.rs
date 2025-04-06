@@ -37,8 +37,7 @@ pub async fn read_until(
     while !buffer[..data_len].contains(&limit) {
         data.push_str(&String::from_utf8_lossy(&buffer[..data_len]));
         data_len = match stream.read(buffer).await {
-            Err(err) => panic!("{}", err),
-            Ok(0) => return None,
+            Ok(0) | Err(_) => return None,
             Ok(n) => n,
         };
     }
