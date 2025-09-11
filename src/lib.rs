@@ -16,6 +16,7 @@ mod server_06;
 mod server_07;
 mod server_08;
 mod server_09;
+mod server_10;
 mod utils;
 
 pub fn get_challenge() -> Result<u8, &'static str> {
@@ -90,10 +91,12 @@ impl Server {
             7 => ServerType::Udp(Arc::new(server_07::Server::new())),
             8 => ServerType::Tcp(Arc::new(server_08::Server::new())),
             9 => ServerType::Tcp(Arc::new(server_09::Server::new())),
+            10 => ServerType::Tcp(Arc::new(server_10::Server::new())),
             _ => return Err("invalid challenge number"),
         };
         Ok(Self { part, server })
     }
+
     pub async fn run(self, ip: &str, port: u32) {
         println!("Running server {}", self.part);
         match self.server {
