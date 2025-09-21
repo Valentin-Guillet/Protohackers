@@ -45,21 +45,20 @@ impl Dir {
                 revision = subdir.put_file(queue, data);
                 self.subdirs.push(subdir);
             }
-        } else {
-            if let Some(file) = self.files.iter_mut().find(|f| f.name == path) {
-                if data != file.revisions[file.revisions.len() - 1] {
-                    file.revisions.push(data);
-                }
-                revision = file.revisions.len();
-            } else {
-                let file = File {
-                    name: path.to_owned(),
-                    revisions: Vec::from([data]),
-                };
-                revision = file.revisions.len();
-                self.files.push(file);
+        } else if let Some(file) = self.files.iter_mut().find(|f| f.name == path) {
+            if data != file.revisions[file.revisions.len() - 1] {
+                file.revisions.push(data);
             }
+            revision = file.revisions.len();
+        } else {
+            let file = File {
+                name: path.to_owned(),
+                revisions: Vec::from([data]),
+            };
+            revision = file.revisions.len();
+            self.files.push(file);
         }
+
         revision
     }
 
@@ -166,8 +165,11 @@ impl ServerState {
     }
 
     fn put_file_data(&mut self, path: String, data: Vec<u8>) -> ServerMessage {
-        if !data.iter().all(|c| (0x20..=0x7f).contains(c) || vec![0x09, 0x0a, 0x0d].contains(c)) {
-            return ServerMessage::Ok(format!("ERR text files only\nREADY"));
+        if !data
+            .iter()
+            .all(|c| (0x20..=0x7f).contains(c) || [0x09, 0x0a, 0x0d].contains(c))
+        {
+            return ServerMessage::Ok("ERR text files only\nREADY".to_string());
         }
         let data = String::from_utf8(data).unwrap();
 

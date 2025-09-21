@@ -91,10 +91,7 @@ impl ServerState {
             }
         }
 
-        self.queues
-            .entry(queue)
-            .or_insert_with(Vec::new)
-            .push(new_job);
+        self.queues.entry(queue).or_default().push(new_job);
 
         responses
     }
@@ -141,24 +138,19 @@ impl ServerState {
             let job = queue.remove(index);
 
             let response = json!({"status": "ok", "id": job.id, "pri": job.priority, "queue": highest_queue, "job": job.task});
-            self.client_jobs
-                .entry(client_id)
-                .or_insert_with(Vec::new)
-                .push(job);
+            self.client_jobs.entry(client_id).or_default().push(job);
 
             vec![ServerMessage::Response(response.to_string())]
+        } else if request
+            .get("wait")
+            .is_some_and(|v| v.as_bool().unwrap_or(false))
+        {
+            self.waiting_clients.insert(client_id, queues);
+            vec![ServerMessage::Waiting]
         } else {
-            if request
-                .get("wait")
-                .is_some_and(|v| v.as_bool().unwrap_or(false))
-            {
-                self.waiting_clients.insert(client_id, queues);
-                vec![ServerMessage::Waiting]
-            } else {
-                vec![ServerMessage::Response(
-                    json!({"status": "no-job"}).to_string(),
-                )]
-            }
+            vec![ServerMessage::Response(
+                json!({"status": "no-job"}).to_string(),
+            )]
         }
     }
 
@@ -169,13 +161,13 @@ impl ServerState {
         let job_id = job_id.as_u64().unwrap();
 
         let mut job_removed = false;
-        for (_, jobs) in &mut self.queues {
+        for jobs in self.queues.values_mut() {
             if let Some(index) = jobs.iter().position(|job| job.id == job_id) {
                 job_removed = true;
                 jobs.swap_remove(index);
             }
         }
-        for (_, jobs) in &mut self.client_jobs {
+        for jobs in self.client_jobs.values_mut() {
             let n = jobs.len();
             jobs.retain(|job| job.id != job_id);
             job_removed = job_removed || (jobs.len() < n);
@@ -213,7 +205,7 @@ impl ServerState {
 
         self.queues
             .entry(job.queue.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(job);
 
         responses
@@ -254,7 +246,7 @@ impl ServerState {
 
             self.queues
                 .entry(job.queue.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(job);
         }
 

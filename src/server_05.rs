@@ -35,7 +35,7 @@ impl Server {
 #[async_trait]
 impl TcpServer for Server {
     async fn handle_connection(&self, stream: TcpStream) {
-        let server_stream = TcpStream::connect(format!("chat.protohackers.com:16963"))
+        let server_stream = TcpStream::connect("chat.protohackers.com:16963")
             .await
             .unwrap();
         let (mut client_reader, mut client_writer) = stream.into_split();

@@ -113,7 +113,7 @@ impl ObfuscationLayer {
         };
 
         let equal_test = "123abcdefg789";
-        if layer.encode(&equal_test) != equal_test.as_bytes() {
+        if layer.encode(equal_test) != equal_test.as_bytes() {
             layer.server_pos = 0; // reset pos
             Ok(layer)
         } else {

@@ -253,12 +253,11 @@ impl Server {
     async fn send_data(
         &self,
         socket: &Arc<UdpSocket>,
-        addr: &SocketAddr,
+        addr: SocketAddr,
         session_id: u32,
         data: String,
     ) {
         let socket = socket.clone();
-        let addr = addr.clone();
         let ack_tasks_copy = Arc::clone(&self.ack_tasks);
         let state = Arc::clone(&self.state);
         let thread = tokio::spawn(async move {
@@ -304,7 +303,7 @@ impl UdpServer for Server {
         println!("{addr:?} <-- {}", request.replace("\n", r"\n"));
 
         let mut state = self.state.lock().await;
-        let Ok(responses) = state.process_request(&request) else {
+        let Ok(responses) = state.process_request(request) else {
             return;
         };
         for response in responses {
@@ -316,7 +315,7 @@ impl UdpServer for Server {
                         println!("{addr:?} --> {}", data.replace("\n", r"\n"));
                         let _ = socket.send_to(data.as_bytes(), addr).await;
                     } else {
-                        self.send_data(&socket, &addr, session_id, data).await
+                        self.send_data(&socket, *addr, session_id, data).await
                     }
                 }
 

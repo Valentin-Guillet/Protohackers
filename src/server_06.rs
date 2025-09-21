@@ -2,12 +2,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time;
 
-use crate::{TcpServer, utils};
+use crate::{utils, TcpServer};
 
 type ServerResult = Result<Vec<ServerMessage>, &'static str>;
 
@@ -84,16 +84,11 @@ impl ServerState {
     }
 
     fn has_client(&self, client_id: Id) -> bool {
-        return self
-            .cameras
-            .iter()
-            .find(|camera| camera.id == client_id)
-            .is_some()
+        self.cameras.iter().any(|camera| camera.id == client_id)
             || self
                 .dispatchers
                 .iter()
-                .find(|dispatcher| dispatcher.id == client_id)
-                .is_some();
+                .any(|dispatcher| dispatcher.id == client_id)
     }
 
     fn compute_speed(obs1: &Observation, obs2: &Observation) -> u16 {
@@ -124,7 +119,7 @@ impl ServerState {
         if self
             .ticket_sent
             .get(&obs1.plate)
-            .is_some_and(|days| days.iter().any(|day| (start_day..=end_day).contains(&day)))
+            .is_some_and(|days| days.iter().any(|day| (start_day..=end_day).contains(day)))
         {
             return Ok(Vec::new());
         }
@@ -175,8 +170,8 @@ impl ServerState {
         let relevant_obs = self
             .observations
             .iter()
-            .cloned()
             .filter(|obs| obs.plate == observation.plate && obs.road == observation.road)
+            .cloned()
             .collect::<Vec<_>>();
 
         self.observations.push(observation.clone());
@@ -222,7 +217,7 @@ impl ServerState {
                 .iter()
                 .cloned()
                 .partition(|ticket| match ticket {
-                    ServerMessage::Ticket { road, .. } => dispatcher.roads.contains(&road),
+                    ServerMessage::Ticket { road, .. } => dispatcher.roads.contains(road),
                     _ => unreachable!(),
                 });
         self.ticket_queue = new_ticket_queue;
@@ -403,7 +398,7 @@ impl Server {
         match msg {
             ServerMessage::WantHeartbeat { interval } => {
                 if interval > 0 {
-                    let writer = Arc::clone(&writer);
+                    let writer = Arc::clone(writer);
                     tokio::spawn(async move { Self::send_heartbeat(writer, interval).await });
                 }
             }
@@ -444,7 +439,7 @@ impl Server {
         loop {
             interval.tick().await;
             let mut writer = writer.lock().await;
-            if let Err(_) = writer.write_all(&heartbeat).await {
+            if writer.write_all(&heartbeat).await.is_err() {
                 break;
             }
         }
